@@ -5,7 +5,7 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 商家规则映射（B版）
+// ----- 商家规则映射（B版规则） -----
 const RULES = {
   "POPULAR": "Lifestyle",
   "MPH": "Lifestyle",
@@ -18,14 +18,13 @@ const RULES = {
   "ADIDAS": "Sports",
   "PRUDENTIAL": "Insurance",
   "AIA": "Insurance",
-  "GREAT EASTERN": "Insurance",
+  "GREAT EASTERN": "Insurance"
 };
 
-// ---- API Handler ----
 export async function POST(req) {
   try {
-    const formData = await req.formData();
-    const file = formData.get("file");
+    const form = await req.formData();
+    const file = form.get("file");
 
     if (!file) {
       return NextResponse.json(
@@ -34,48 +33,50 @@ export async function POST(req) {
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-    // ---- STEP 1: OCR ----
+    // ---- OCR ----
     const ocr = await client.images.extractText({
       file: buffer,
-      purpose: "ocr",
+      purpose: "ocr"
     });
 
     const text = ocr.text || "";
 
-    // ---- STEP 2: 提取干净信息 ----
+    // ---- 清洗 ----
+    const merchant = text.match(/merchant[: ]*(.*)$/im)?.[1]?.trim() || "";
+    const date = text.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/)?.[0] || "";
+    const amount = parseFloat(text.match(/\d+\.\d{2}/)?.[0] || "0");
+
     const clean = {
-      merchant: text.match(/(?<=MERCHANT:|STORE:|SHOP:).*/i)?.[0]?.trim() || "",
-      date: text.match(/\d{4}[-/]\d{2}[-/]\d{2}/)?.[0] || "",
-      amount: parseFloat(text.match(/(\d+\.\d+)/)?.[0] || "0"),
-      clean_text: text,
+      merchant,
+      date,
+      amount,
+      clean_text: text
     };
 
-    // ---- STEP 3: 分类 ----
-    const merchantUpper = clean.merchant.toUpperCase();
-    const mapped = RULES[merchantUpper] || "Others";
+    // ---- 分类 ----
+    const mapped = RULES[merchant.toUpperCase()] || "Others";
 
     const final = {
-      ...clean,
+      merchant,
+      date,
+      amount,
       category: mapped,
       sub_category: mapped,
       eligible_for_tax: mapped !== "Others",
       tax_category: mapped,
-      month: clean.date.slice(5, 7),
-      confidence: 0.92,
+      month: date.slice(0, 7),
+      confidence: 0.9
     };
 
-    return NextResponse.json({
-      success: true,
-      clean,
-      final,
-    });
-
+    return NextResponse.json(
+      { success: true, clean, final },
+      { status: 200 }
+    );
   } catch (err) {
     return NextResponse.json(
-      { error: err.message, stack: String(err) },
+      { error: err.message },
       { status: 500 }
     );
   }
