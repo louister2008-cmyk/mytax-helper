@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
-// ----- 商家规则映射（B版规则） -----
-const RULES = {
+// 商家规则映射（B版）
+const RULES: Record<string, string> = {
   "POPULAR": "Lifestyle",
   "MPH": "Lifestyle",
   "KINOKUNIYA": "Lifestyle",
@@ -18,13 +18,14 @@ const RULES = {
   "ADIDAS": "Sports",
   "PRUDENTIAL": "Insurance",
   "AIA": "Insurance",
-  "GREAT EASTERN": "Insurance"
+  "GREAT EASTERN": "Insurance",
 };
 
-export async function POST(req) {
+// ---- API Handler ----
+export async function POST(req: Request) {
   try {
     const form = await req.formData();
-    const file = form.get("file");
+    const file = form.get("file") as File | null;
 
     if (!file) {
       return NextResponse.json(
@@ -35,48 +36,45 @@ export async function POST(req) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // ---- OCR ----
-    const ocr = await client.images.extractText({
+    
+    // ---- STEP 1: OCR ----
+    const ocr = await (client.images as any).extractText({
       file: buffer,
-      purpose: "ocr"
+      purpose: "ocr",
     });
 
     const text = ocr.text || "";
 
-    // ---- 清洗 ----
-    const merchant = text.match(/merchant[: ]*(.*)$/im)?.[1]?.trim() || "";
-    const date = text.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/)?.[0] || "";
-    const amount = parseFloat(text.match(/\d+\.\d{2}/)?.[0] || "0");
-
+    // ---- STEP 2: 提取干净信息 ----
     const clean = {
-      merchant,
-      date,
-      amount,
-      clean_text: text
+      merchant:
+        text.match(/(?<=MERCHANT:|STORE:|SHOP:).*/i)?.[0]?.trim() || "",
+      date: text.match(/\d{4}[-/]\d{2}[-/]\d{2}/)?.[0] || "",
+      amount: parseFloat(text.match(/(\d+\.\d+)/)?.[0] || "0"),
+      clean_text: text,
     };
 
-    // ---- 分类 ----
-    const mapped = RULES[merchant.toUpperCase()] || "Others";
+    // ---- STEP 3: 分类 ----
+    const merchantUpper = clean.merchant.toUpperCase();
+    const mapped = RULES[merchantUpper] || "Others";
 
     const final = {
-      merchant,
-      date,
-      amount,
+      ...clean,
       category: mapped,
       sub_category: mapped,
       eligible_for_tax: mapped !== "Others",
       tax_category: mapped,
-      month: date.slice(0, 7),
-      confidence: 0.9
+      month: clean.date.slice(0, 7),
+      confidence: 0.92,
     };
 
     return NextResponse.json(
       { success: true, clean, final },
       { status: 200 }
     );
-  } catch (err) {
+  } catch (err: any) {
     return NextResponse.json(
-      { error: err.message },
+      { error: err.message, stack: String(err) },
       { status: 500 }
     );
   }
