@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 
 export default function AnalysisPage() {
@@ -10,17 +12,19 @@ export default function AnalysisPage() {
     if (saved) {
       try {
         setData(JSON.parse(saved));
-      } catch {
+      } catch (e) {
+        console.error("Failed to parse saved analysisResult", e);
         setData(null);
       }
     }
   }, []);
 
-  // 防呆：analysisResult 不存在
+  // --- 防呆：没有数据时避免崩溃 ---
   if (!data || !data.final) {
     return (
       <div style={{ padding: "40px", textAlign: "center" }}>
-        <h2>No analysis data found.</h2>
+        <h2>No valid analysis data</h2>
+        <p>The analysis result is missing or corrupted.</p>
         <a href="/upload" style={{ color: "#3b82f6" }}>Upload again</a>
       </div>
     );
@@ -32,11 +36,6 @@ export default function AnalysisPage() {
     <div style={{ padding: "40px", maxWidth: "800px", margin: "auto" }}>
       <h1 style={{ fontSize: "28px", fontWeight: "bold" }}>Receipt Analysis</h1>
 
-      <p style={{ opacity: 0.7 }}>
-        AI has extracted & classified this receipt automatically.
-      </p>
-
-      {/* Extracted info */}
       <div
         style={{
           marginTop: "30px",
@@ -53,9 +52,9 @@ export default function AnalysisPage() {
         <div style={{ lineHeight: "1.8" }}>
           <div><strong>Merchant:</strong> {final.merchant || "Unknown"}</div>
           <div><strong>Date:</strong> {final.date || "Unknown"}</div>
-          <div><strong>Amount:</strong> RM {final.amount?.toFixed(2) || "0.00"}</div>
+          <div><strong>Amount:</strong> RM {(final.amount || 0).toFixed(2)}</div>
           <div><strong>Category:</strong> {final.category}</div>
-          <div><strong>Tax Eligible:</strong> {final.eligible_for_tax ? "Yes" : "No"}</div>
+          <div><strong>Eligible for Tax:</strong> {final.eligible_for_tax ? "✔ Yes" : "❌ No"}</div>
         </div>
       </div>
 
